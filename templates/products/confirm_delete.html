@@ -1,0 +1,123 @@
+<!-- templates/products/confirm_delete.html -->
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container mt-4">
+        <h2>Удалить товары</h2>
+
+        <p>Вы уверены, что хотите удалить следующие товары?</p>
+
+        <form id="confirmDeleteForm" class="mt-5">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Код</th>
+                        <th>Вес</th>
+                        <th>Цена</th>
+                    </tr>
+                </thead>
+                <tbody id="productsTableBody"></tbody>
+            </table>
+
+            <button type="submit" class="btn btn-danger">Подтвердить</button>
+            <a href="/products/" class="btn btn-secondary ms-4">Отмена</a>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+        const productIds = JSON.parse(localStorage.getItem("deleteProductIds") || "[]");
+
+        // Загрузка данных товаров для подтверждения
+        async function loadProducts() {
+            if (productIds.length === 0) {
+                document.getElementById("productsTableBody").innerHTML = "<tr><td colspan='3'>Нет выбранных товаров</td></tr>";
+                document.getElementById("confirmDeleteForm").querySelector("button[type='submit']").disabled = true;
+                return;
+            }
+
+            try {
+                const response = await fetch(`${SiteUrl}/products/ids`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({ product_ids: productIds })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ошибка загрузки товаров: ${response.status}`);
+                }
+
+                const products = await response.json();
+                renderProducts(products);
+            } catch (error) {
+                console.error("Ошибка при загрузке товаров:", error);
+                document.getElementById("productsTableBody").innerHTML = "<tr><td colspan='3'>Ошибка загрузки данных</td></tr>";
+                document.getElementById("confirmDeleteForm").querySelector("button[type='submit']").disabled = true;
+            }
+        }
+
+        // Рендеринг таблицы товаров
+        function renderProducts(products) {
+            const tbody = document.getElementById("productsTableBody");
+            tbody.innerHTML = "";
+            products.forEach(product => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${product.product_code || ""}</td>
+                    <td>${product.weight || ""}</td>
+                    <td>${product.price || ""}</td>
+                `;
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "product_ids"; // Имя соответствует ожидаемому на сервере
+                input.value = product.id;
+                tr.appendChild(input);
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Обработка подтверждения удаления
+        document.getElementById("confirmDeleteForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const productIds = formData.getAll("product_ids").map(id => parseInt(id));
+
+            if (productIds.length === 0) {
+                alert("Не указаны ID товаров для удаления");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${SiteUrl}/products/delete`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    },
+                    body: formData // Отправляем FormData напрямую
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Ошибка: ${response.status} - ${JSON.stringify(errorData)}`);
+                }
+
+                localStorage.removeItem("deleteProductIds");
+                localStorage.removeItem("selectedProductIds");
+                window.location.href = `/products/`;
+            } catch (error) {
+                console.error("Ошибка при удалении товаров:", error);
+                alert("Не удалось удалить товары: " + error.message);
+            }
+        });
+
+        // Начальная загрузка
+        loadProducts();
+    </script>
+{% endblock %}

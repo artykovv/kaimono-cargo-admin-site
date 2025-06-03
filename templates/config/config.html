@@ -1,0 +1,80 @@
+<!-- templates/settings/settings.html -->
+{% extends "base.html" %}
+
+{% block content %}
+{% include 'components/nav_user_config.html' %}
+
+
+        <h3 class="mb-4">Параметры</h3>
+
+        <!-- Сообщения -->
+        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Параметр</th>
+                    <th>Текущие значения</th>
+                    <th>Изменить</th>
+                </tr>
+            </thead>
+            <tbody id="settingsBody"></tbody>
+        </table>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+
+        // Функция загрузки параметров
+        async function loadSettings() {
+            try {
+                const response = await fetch(`${SiteUrl}/settings/?skip=0&limit=100`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ошибка: ${response.status}`);
+                }
+
+                const settings = await response.json();
+                renderSettings(settings);
+            } catch (error) {
+                console.error("Ошибка при загрузке параметров:", error);
+                document.getElementById("settingsBody").innerHTML = "<tr><td colspan='3'>Ошибка загрузки данных</td></tr>";
+                document.getElementById("errorMessage").textContent = "Не удалось загрузить данные: " + error.message;
+                document.getElementById("errorMessage").style.display = "block";
+            }
+        }
+
+        // Рендеринг списка параметров
+        function renderSettings(settings) {
+            const tbody = document.getElementById("settingsBody");
+            tbody.innerHTML = "";
+
+            if (settings && settings.length > 0) {
+                settings.forEach(config => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${config.name || ""}</td>
+                        <td>${config.value || ""}</td>
+                        <td>
+                            <a href="/setting/edit/${config.id}" class="btn btn-sm btn-warning">U</a>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = "<tr><td colspan='3'>Нет параметров.</td></tr>";
+            }
+        }
+
+        // Начальная загрузка
+        loadSettings();
+    </script>
+{% endblock %}

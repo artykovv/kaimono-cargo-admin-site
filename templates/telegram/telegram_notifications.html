@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h3 class="mb-4">Уведомления Телеграм</h3>
+
+    <div id="successMessage" class="alert alert-success" style="display: none;"></div>
+    <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+    <form id="notificationForm" enctype="multipart/form-data">
+        {% include 'telegram/select_users.html' %}
+
+        <div class="form-group mb-3">
+            <label>Тип отправки:</label><br>
+            <label>
+                <input type="radio" name="message_type" value="text" checked onclick="toggleImageInput()"> Только текст
+            </label>
+            <label>
+                <input type="radio" name="message_type" value="photo" onclick="toggleImageInput()"> С фото
+            </label>
+        </div>
+
+        <div class="form-group mb-3">
+            <label for="message">Сообщение</label>
+            <textarea class="form-control" id="message" name="message" rows="3"></textarea>
+        </div>
+
+        <div class="form-group mb-3" id="imageInput" style="display: none;">
+            <label for="images">Изображения</label>
+            <input type="file" class="form-control" id="images" name="files" multiple onchange="previewImages(event)">
+            <div id="imagePreview" class="mt-2"></div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Отправить</button>
+    </form>
+
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+
+        function toggleImageInput() {
+            const isPhoto = document.querySelector('input[name="message_type"][value="photo"]').checked;
+            document.getElementById('imageInput').style.display = isPhoto ? 'block' : 'none';
+        }
+
+        function previewImages(event) {
+            const previewDiv = document.getElementById('imagePreview');
+            previewDiv.innerHTML = '';
+            const files = event.target.files;
+            for (let file of files) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.style.maxWidth = '100px';
+                img.style.marginRight = '10px';
+                previewDiv.appendChild(img);
+            }
+        }
+
+        toggleImageInput();
+
+        document.getElementById("notificationForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const selectedClientsEl = document.getElementById("selected_clients");
+            const selectedChatIds = Array.from(selectedClientsEl.options).map(opt => opt.value);
+            const messageType = formData.get("message_type");
+
+            if (!formData.get("message").trim() && (messageType === "photo" && !formData.getAll("files").length)) {
+                document.getElementById("errorMessage").textContent = "Нужно ввести текст сообщения или выбрать фото (для типа 'С фото').";
+                document.getElementById("errorMessage").style.display = "block";
+                return;
+            }
+
+            if (document.querySelector('input[name="send_type"][value="selected"]').checked && !selectedChatIds.length) {
+                document.getElementById("errorMessage").textContent = "Не выбраны пользователи для отправки.";
+                document.getElementById("errorMessage").style.display = "block";
+                return;
+            }
+
+            try {
+                let endpoint = messageType === "photo" ? `${SiteUrl}/telegram/send-photo` : `${SiteUrl}/telegram/send-message`;
+                let body;
+                let headers = { "Authorization": `Bearer ${token}` };
+
+                if (messageType === "photo") {
+                    // Для фото используем multipart/form-data
+                    const chatIdsString = document.querySelector('input[name="send_type"][value="all"]').checked 
+                        ? "" 
+                        : selectedChatIds.join(",");
+                    formData.set("telegram_chat_ids", chatIdsString);
+                    // Устанавливаем message_text явно, так как он уже в formData
+                    formData.set("message_text", formData.get("message"));
+                    body = formData;
+                } else {
+                    // Для текста используем JSON
+                    const payload = {
+                        message_text: formData.get("message"),
+                        telegram_chat_ids: document.querySelector('input[name="send_type"][value="all"]').checked 
+                            ? [] 
+                            : selectedChatIds
+                    };
+                    body = JSON.stringify(payload);
+                    headers["Content-Type"] = "application/json";
+                }
+
+                const response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: headers,
+                    body: body
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Ошибка: ${response.status} - ${JSON.stringify(errorData)}`);
+                }
+
+                const responseData = await response.json();
+                document.getElementById("successMessage").textContent = responseData.message;
+                document.getElementById("successMessage").style.display = "block";
+                document.getElementById("errorMessage").style.display = "none";
+
+
+            } catch (error) {
+                document.getElementById("errorMessage").textContent = error.message;
+                document.getElementById("errorMessage").style.display = "block";
+                document.getElementById("successMessage").style.display = "none";
+            }
+        });
+    </script>
+{% endblock %}

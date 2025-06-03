@@ -1,0 +1,118 @@
+<!-- templates/users/create_user.html -->
+{% extends "base.html" %}
+
+{% block content %}
+{% include 'components/nav_user_config.html' %}
+
+
+        <h2>Добавить пользователя</h2>
+
+        <!-- Сообщения -->
+        <div id="successMessage" class="alert alert-success" style="display: none;"></div>
+        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+        <form id="createUserForm" class="mb-3">
+            <div class="mb-3">
+                <label for="email" class="form-label">Электронная почта</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Пароль</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+                <small class="form-text text-muted">Минимум 8 символов, включая буквы и цифры.</small>
+                <div id="passwordError" class="text-danger" style="display: none;"></div>
+            </div>
+            <div class="mb-3">
+                <label for="name" class="form-label">Имя</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+            </div>
+            <div class="mb-3">
+                <label for="lastname" class="form-label">Фамилия</label>
+                <input type="text" class="form-control" id="lastname" name="lastname" required>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="is_active" name="is_active">
+                <label for="is_active" class="form-check-label">Активен</label>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="is_superuser" name="is_superuser">
+                <label for="is_superuser" class="form-check-label">Суперпользователь</label>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="is_verified" name="is_verified">
+                <label for="is_verified" class="form-check-label">Подтверждён</label>
+            </div>
+            <button type="submit" class="btn btn-primary">Добавить</button>
+            <a href="/users/" class="btn btn-secondary ms-2">Отмена</a>
+        </form>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+
+        // Проверка пароля
+        function validatePassword(password) {
+            const minLength = 8;
+            const hasLetter = /[a-zA-Z]/.test(password);
+            const hasNumber = /\d/.test(password);
+            return password.length >= minLength && hasLetter && hasNumber;
+        }
+
+        document.getElementById("createUserForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const password = formData.get("password");
+
+            // Проверка пароля
+            if (!validatePassword(password)) {
+                document.getElementById("passwordError").textContent = "Пароль должен содержать минимум 8 символов, включая буквы и цифры.";
+                document.getElementById("passwordError").style.display = "block";
+                return;
+            }
+            document.getElementById("passwordError").style.display = "none";
+
+            const data = {
+                email: formData.get("email"),
+                password: password,
+                is_active: formData.get("is_active") === "on",
+                is_superuser: formData.get("is_superuser") === "on",
+                is_verified: formData.get("is_verified") === "on",
+                name: formData.get("name"),
+                lastname: formData.get("lastname")
+            };
+
+            try {
+                const response = await fetch(`${SiteUrl}/auth/register`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Ошибка: ${response.status} - ${JSON.stringify(errorData)}`);
+                }
+
+                const result = await response.json();
+                document.getElementById("successMessage").textContent = "Пользователь успешно добавлен!";
+                document.getElementById("successMessage").style.display = "block";
+                document.getElementById("errorMessage").style.display = "none";
+
+                setTimeout(() => {
+                    window.location.href = `/users/`;
+                }, 1500);
+            } catch (error) {
+                console.error("Ошибка при добавлении пользователя:", error);
+                document.getElementById("errorMessage").textContent = error.message;
+                document.getElementById("errorMessage").style.display = "block";
+                document.getElementById("successMessage").style.display = "none";
+            }
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,76 @@
+<!-- templates/clients/delete_client.html -->
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container mt-4">
+        <h2>Удалить клиента</h2>
+
+        <!-- Сообщение об ошибке -->
+        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+        <!-- Форма подтверждения удаления -->
+        <form id="deleteClientForm" class="mb-3">
+            <p>Вы уверены, что хотите удалить клиента "<span id="clientName"></span>"?</p>
+            <button type="submit" class="btn btn-danger">Удалить</button>
+            <a href="/clients/" class="btn btn-secondary">Отмена</a>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+        const clientId = window.location.pathname.split('/')[2]; // Извлекаем ID из URL (/clients/2)
+
+        // Загрузка данных клиента
+        async function loadClient() {
+            try {
+                const response = await fetch(`${SiteUrl}/clients/${clientId}`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`Ошибка: ${response.status}`);
+                }
+                const client = await response.json();
+                document.getElementById("clientName").textContent = client.name || "Без имени";
+            } catch (error) {
+                console.error("Ошибка при загрузке клиента:", error);
+                document.getElementById("errorMessage").textContent = "Не удалось загрузить данные клиента";
+                document.getElementById("errorMessage").style.display = "block";
+            }
+        }
+
+        // Обработка удаления клиента
+        document.getElementById("deleteClientForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            try {
+                const response = await fetch(`${SiteUrl}/clients/${clientId}`, {
+                    method: "DELETE",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Ошибка: ${response.status} - ${JSON.stringify(errorData)}`);
+                }
+
+                // Успешно удалено, перенаправляем на список клиентов
+                window.location.href = `/clients/`;
+            } catch (error) {
+                console.error("Ошибка при удалении клиента:", error);
+                document.getElementById("errorMessage").textContent = error.message;
+                document.getElementById("errorMessage").style.display = "block";
+            }
+        });
+
+        // Начальная загрузка данных клиента
+        loadClient();
+    </script>
+{% endblock %}

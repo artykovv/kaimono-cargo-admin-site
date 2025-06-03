@@ -1,0 +1,296 @@
+<!-- templates/products/products.html -->
+{% extends "base.html" %}
+
+{% block content %}
+    <!-- Форма поиска -->
+    <form id="searchForm" class="mb-3">
+        <div class="d-flex justify-content-end mb-3">
+            <div class="dropdown">
+                <button class="btn btn-success dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Добавить
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="/products/create">Добавить</a></li>
+                    <li><a class="dropdown-item" href="/products/china">Китай</a></li>
+                    <li><a class="dropdown-item" href="/products/bishkek">Бишкек</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="row g-2">
+            <!-- Поиск -->
+            <div class="col-md-3">
+                <input type="text" name="search" class="form-control" placeholder="Поиск по коду, статусу или клиенту" value="">
+            </div>
+            <!-- Фильтр по статусу -->
+            <div class="col-md-2">
+                <select name="status_id" class="form-select" id="statusSelect">
+                    <option value="">Все статусы</option>
+                    <!-- Статусы будут загружены через JS -->
+                </select>
+            </div>
+            <!-- Фильтр по дате -->
+            <div class="col-md-2">
+                <input type="date" name="start_date" class="form-control" placeholder="Начальная дата">
+            </div>
+            <div class="col-md-2">
+                <input type="date" name="end_date" class="form-control" placeholder="Конечная дата">
+            </div>
+            <!-- Кнопка фильтра -->
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Применить</button>
+            </div>
+            <!-- Сброс фильтров -->
+            <div class="col-md-1">
+                <a href="#" class="btn btn-secondary w-100" id="resetBtn">Сброс</a>
+            </div>
+        </div>
+    </form>
+
+    <!-- Таблица с товарами -->
+    <form id="productsForm" method="post" action="">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="select-all-products" /></th>
+                    <th>Код</th>
+                    <th>Вес</th>
+                    <th>Цена</th>
+                    <th>Дата</th>
+                    <th>Статус</th>
+                    <th>Клиент</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="productsTableBody"></tbody>
+        </table>
+
+        <div class="d-flex justify-content-start">
+            <button type="submit" class="btn btn-warning">Изменить</button>
+        </div>
+    </form>
+
+    <!-- Пагинация -->
+    <nav aria-label="Page navigation" class="d-flex justify-content-center">
+        <ul class="pagination" id="pagination"></ul>
+    </nav>
+
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+
+        // Параметры запроса
+        let params = {
+            search: "",
+            status_id: "",
+            start_date: "",
+            end_date: "",
+            page: 1,
+            page_size: 30
+        };
+
+        // Глобальная переменная для хранения статусов
+        let statuses = [];
+
+        // Функция построения строки запроса
+        function buildQueryString(params) {
+            const usp = new URLSearchParams();
+            if (params.search) usp.set("search", params.search);
+            if (params.status_id) usp.set("status_id", params.status_id);
+            if (params.start_date) usp.set("start_date", params.start_date);
+            if (params.end_date) usp.set("end_date", params.end_date);
+            usp.set("page", params.page);
+            usp.set("page_size", params.page_size);
+            return usp.toString();
+        }
+
+        // Загрузка статусов для селекта (один раз при загрузке страницы)
+        async function initStatuses() {
+            try {
+                const response = await fetch(`${SiteUrl}/statuses/?skip=0&limit=100`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+                if (!response.ok) throw new Error(`Ошибка статусов: ${response.status}`);
+                statuses = await response.json(); // Сохраняем статусы в глобальную переменную
+
+                // Заполнение селекта один раз
+                const select = document.getElementById("statusSelect");
+                select.innerHTML = '<option value="">Все статусы</option>'; // Очищаем перед добавлением
+                statuses.forEach(status => {
+                    const option = document.createElement("option");
+                    option.value = status.id;
+                    option.textContent = status.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Ошибка при загрузке статусов:", error);
+            }
+        }
+
+        // Загрузка товаров
+        async function loadProducts() {
+            const queryString = buildQueryString(params);
+            try {
+                const response = await fetch(`${SiteUrl}/products/?${queryString}`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`Ошибка товаров: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // Передаём данные товаров и уже загруженные статусы в рендеринг
+                renderProducts(data);
+            } catch (error) {
+                console.error("Ошибка при загрузке товаров:", error);
+                document.getElementById("productsTableBody").innerHTML = "<tr><td colspan='8'>Ошибка загрузки данных</td></tr>";
+            }
+        }
+
+        // Рендеринг таблицы товаров
+        function renderProducts(data) {
+            const tbody = document.getElementById("productsTableBody");
+            tbody.innerHTML = "";
+
+            // Создание словаря для статусов
+            const statusMap = statuses.reduce((map, status) => {
+                map[status.id] = status.name;
+                return map;
+            }, {});
+
+            // Рендеринг строк таблицы
+            data.products.forEach(product => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td><input type="checkbox" name="product_ids" value="${product.id}" class="product-checkbox"></td>
+                    <td>${product.product_code || ""}</td>
+                    <td>${product.weight || "-"}</td>
+                    <td>${product.price || "-"}</td>
+                    <td>${new Date(product.date).toLocaleDateString("ru-RU", {year: "numeric", month: "2-digit", day: "2-digit"})}</td>
+                    <td>${statusMap[product.status_id] || ""}</td>
+                    <td>${product.client ? product.client.code : ""}</td>
+                    <td>
+                        <a href="/products/edit/${product.id}" class="btn btn-sm btn-warning">U</a>
+                        <a href="/products/delete/${product.id}" class="btn btn-sm btn-danger">D</a>
+                        <a href="/products/detail/${product.id}" class="btn btn-sm btn-primary">T</a>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Рендеринг пагинации
+            renderPagination(data);
+        }
+
+        // Рендеринг пагинации
+        function renderPagination(data) {
+            const pagination = document.getElementById("pagination");
+            pagination.innerHTML = "";
+
+            const firstLi = document.createElement("li");
+            firstLi.className = `page-item ${data.page === 1 ? "disabled" : ""}`;
+            firstLi.innerHTML = `<a class="page-link" href="#" data-page="1">«</a>`;
+            pagination.appendChild(firstLi);
+
+            const prevLi = document.createElement("li");
+            prevLi.className = `page-item ${data.page === 1 ? "disabled" : ""}`;
+            prevLi.innerHTML = `<a class="page-link" href="#" data-page="${data.page - 1}">‹</a>`;
+            pagination.appendChild(prevLi);
+
+            const startPage = Math.max(1, data.page - 4);
+            const endPage = Math.min(data.total_pages, data.page + 4);
+            for (let i = startPage; i <= endPage; i++) {
+                const li = document.createElement("li");
+                li.className = `page-item ${i === data.page ? "active" : ""}`;
+                li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+                pagination.appendChild(li);
+            }
+
+            const nextLi = document.createElement("li");
+            nextLi.className = `page-item ${data.page === data.total_pages ? "disabled" : ""}`;
+            nextLi.innerHTML = `<a class="page-link" href="#" data-page="${data.page + 1}">›</a>`;
+            pagination.appendChild(nextLi);
+
+            const lastLi = document.createElement("li");
+            lastLi.className = `page-item ${data.page === data.total_pages ? "disabled" : ""}`;
+            lastLi.innerHTML = `<a class="page-link" href="#" data-page="${data.total_pages}">»</a>`;
+            pagination.appendChild(lastLi);
+
+            pagination.querySelectorAll(".page-link").forEach(link => {
+                link.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    const page = parseInt(e.target.dataset.page);
+                    if (page && page !== params.page) {
+                        params.page = page;
+                        loadProducts();
+                    }
+                });
+            });
+        }
+
+        // Обработка формы поиска
+        document.getElementById("searchForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            params.search = formData.get("search") || "";
+            params.status_id = formData.get("status_id") || "";
+            params.start_date = formData.get("start_date") || "";
+            params.end_date = formData.get("end_date") || "";
+            params.page = 1;
+            loadProducts();
+        });
+
+        // Сброс фильтров
+        document.getElementById("resetBtn").addEventListener("click", (e) => {
+            e.preventDefault();
+            params.search = "";
+            params.status_id = "";
+            params.start_date = "";
+            params.end_date = "";
+            params.page = 1;
+            document.querySelector("input[name='search']").value = "";
+            document.querySelector("select[name='status_id']").value = "";
+            document.querySelector("input[name='start_date']").value = "";
+            document.querySelector("input[name='end_date']").value = "";
+            loadProducts();
+        });
+
+        // Выбор всех чекбоксов
+        document.getElementById("select-all-products").addEventListener("change", function () {
+            const checkboxes = document.querySelectorAll(".product-checkbox");
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+        });
+
+        // Обработка отправки формы для массового редактирования
+        document.getElementById("productsForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const selectedIds = Array.from(formData.getAll("product_ids")).map(id => parseInt(id));
+            if (selectedIds.length === 0) {
+                alert("Выберите хотя бы один товар для редактирования");
+                return;
+            }
+            localStorage.setItem("selectedProductIds", JSON.stringify(selectedIds));
+            window.location.href = `/products/update`;
+        });
+
+        // Инициализация страницы
+        async function init() {
+            await initStatuses(); // Сначала загружаем статусы
+            await loadProducts(); // Потом загружаем товары
+        }
+
+        // Запуск инициализации
+        init();
+    </script>
+{% endblock %}

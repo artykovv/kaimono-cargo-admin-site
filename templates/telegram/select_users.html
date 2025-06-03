@@ -1,0 +1,97 @@
+<div class="form-group mb-3">
+    <label>
+        <input type="radio" name="send_type" value="all" checked onclick="onSendTypeChange()">
+        Всем пользователям
+    </label>
+     
+    <label>
+        <input type="radio" name="send_type" value="selected" onclick="onSendTypeChange()">
+        Выбрать пользователей
+    </label>
+  </div>
+  
+  <div id="users-block" style="display: none; margin-top: 15px;">
+    <div>
+        <label for="search-input">Поиск пользователя:</label>
+        <input type="text" id="search-input" class="form-control mt-2" placeholder="Имя, телефон, город..." onkeyup="searchClients()">
+    </div>
+    <div id="search-results" class="mt-3"></div>
+    <select id="selected_clients" name="selected_clients" class="form-control mt-3" multiple size="5"></select>
+    <button type="button" class="btn btn-danger mt-2" onclick="removeSelectedFromSelect()">Удалить выбранных</button>
+  </div>
+  
+  <script>
+    function onSendTypeChange() {
+        const sendTypeAll = document.querySelector('input[name="send_type"][value="all"]').checked;
+        document.getElementById('users-block').style.display = sendTypeAll ? 'none' : 'block';
+    }
+  
+    onSendTypeChange();
+  
+    async function searchClients() {
+        const query = document.getElementById('search-input').value.trim();
+        const resultsDiv = document.getElementById('search-results');
+  
+        if (!query) {
+            resultsDiv.innerHTML = "";
+            return;
+        }
+  
+        const response = await fetch(`${SiteUrl}/telegram/clients/search?search=${encodeURIComponent(query)}`, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/json"
+            }
+        });
+        const data = await response.json();
+  
+        let html = "";
+        data.forEach(client => {
+            const displayName = client.name ? `${client.name} ${client.code ? `(${client.code})` : ""}` : `ID: ${client.id}`;
+            // Используем telegram_chat_id как value, если он есть, иначе id
+            const value = client.telegram_chat_id || client.id;
+            html += `
+                <div>
+                    <label>
+                        <input type="checkbox" value="${value}" data-id="${client.id}" onchange="onClientCheckboxChange(this)">
+                        ${displayName}
+                    </label>
+                </div>
+            `;
+        });
+        resultsDiv.innerHTML = html;
+    }
+  
+    function onClientCheckboxChange(checkbox) {
+        const selectEl = document.getElementById('selected_clients');
+        const clientValue = checkbox.value; // Это telegram_chat_id или id
+  
+        if (checkbox.checked) {
+            const labelText = checkbox.parentNode.textContent.trim();
+            const newOption = new Option(labelText, clientValue, true, true);
+            selectEl.add(newOption);
+        } else {
+            for (let i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].value === clientValue) {
+                    selectEl.remove(i);
+                    break;
+                }
+            }
+        }
+    }
+  
+    function removeSelectedFromSelect() {
+        const selectEl = document.getElementById('selected_clients');
+        const selectedOptions = [...selectEl.selectedOptions];
+  
+        selectedOptions.forEach(option => {
+            const optionValue = option.value;
+            const checkboxes = document.querySelectorAll('#search-results input[type="checkbox"]');
+            checkboxes.forEach(ch => {
+                if (ch.value === optionValue) ch.checked = false;
+            });
+            selectEl.remove(option.index);
+        });
+    }
+  </script>

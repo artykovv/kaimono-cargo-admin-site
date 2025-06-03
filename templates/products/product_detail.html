@@ -1,0 +1,104 @@
+<!-- templates/products/product_detail.html -->
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container mt-5">
+        <h2 class="mb-4">Детали товара</h2>
+
+        <!-- Product details card -->
+        <div class="">
+            <div class="mt-5">
+                <h4 class="card-title">Код товара: <span id="productCode"></span></h4>
+            </div>
+            <div class="card-body mt-5">
+                <table class="table table-bordered">
+                    <tbody>
+                        <tr>
+                            <th>Код клиента:</th>
+                            <td id="clientCode"></td>
+                        </tr>
+                        <tr>
+                            <th>Код товара:</th>
+                            <td id="productCodeRow"></td>
+                        </tr>
+                        <tr>
+                            <th>Вес товара:</th>
+                            <td id="weight"></td>
+                        </tr>
+                        <tr>
+                            <th>Цена товара:</th>
+                            <td id="price"></td>
+                        </tr>
+                        <tr>
+                            <th>Статус:</th>
+                            <td id="status"></td>
+                        </tr>
+                        <tr>
+                            <th>Дата:</th>
+                            <td id="date"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Client detail link -->
+        <div class="mt-4">
+            <a href="/products/" class="btn btn-secondary">Назад</a>
+            <a id="deleteLink" href="#" class="btn btn-danger">Удалить</a>
+            <a id="editLink" href="#" class="btn btn-warning">Изменить</a>
+            <a id="clientLink" href="#" class="btn btn-primary" style="display: none;">Товары этого клиента</a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+        const productId = window.location.pathname.split('/')[3]; // Извлекаем ID из URL (/products/detail/2)
+
+        // Загрузка данных товара
+        async function loadProduct() {
+            try {
+                const response = await fetch(`${SiteUrl}/products/${productId}`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`Ошибка: ${response.status}`);
+                }
+                const product = await response.json();
+                renderProduct(product);
+            } catch (error) {
+                console.error("Ошибка при загрузке товара:", error);
+                document.getElementById("productCode").textContent = "Ошибка загрузки данных";
+            }
+        }
+
+        // Рендеринг данных товара
+        function renderProduct(product) {
+            document.getElementById("productCode").textContent = product.product_code || "";
+            document.getElementById("productCodeRow").textContent = product.product_code || "";
+            document.getElementById("weight").textContent = product.weight ? parseFloat(product.weight).toFixed(2) : "-";
+            document.getElementById("price").textContent = product.price || "-";
+            document.getElementById("status").textContent = product.status ? product.status.name : "";
+            document.getElementById("date").textContent = product.date ? new Date(product.date).toLocaleDateString("ru-RU", {year: "numeric", month: "2-digit", day: "2-digit"}) : "";
+
+            
+            const clientCodeCell = document.getElementById("clientCode");
+            if (product.client && product.client.id) {
+                clientCodeCell.innerHTML = `<a href="/clients/${product.client.id}/detail" class="link">${product.client.code || ""}</a>`;
+            } else {
+                clientCodeCell.textContent = "-";
+            }
+            document.getElementById("deleteLink").href = `/products/delete/${product.id}`;
+            document.getElementById("editLink").href = `/products/edit/${product.id}`;
+        }
+
+        // Начальная загрузка
+        loadProduct();
+    </script>
+{% endblock %}

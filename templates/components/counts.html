@@ -1,0 +1,124 @@
+<div class="row gx-5 gx-xl-10 mb-xl-10">
+  <div class="col-md-6 col-lg-6 col-xl-6 col-xxl-3 mb-10">
+    <div class="card card-flush h-md-50 mb-5 mb-xl-10">
+      <div class="card-body">
+        <h5 class="text-muted fw-normal mt-0">Количество клиентов</h5>
+        <h3 id="clients-count" class="mt-3 mb-3">0</h3>
+        <p><a href="/clients/" class="btn btn-outline-primary btn-sm">Поиск</a></p>
+        <p><a href="/clients/create" class="btn btn-outline-primary btn-sm">Добавить</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-6 col-xl-6 col-xxl-3 mb-10">
+    <div class="card card-flush h-md-50 mb-5 mb-xl-10">
+      <div class="card-body">
+        <h5 class="text-muted fw-normal mt-0">Товары</h5>
+        <p class="fsmb-0 mb-3">
+          <span class="fs-2" id="products-count">0</span>
+          <span class="text-nowrap text-muted">всего товаров</span>
+        </p>
+        <p class="mb-0 text-muted mt-3">
+          <span id="products-count-china" class="text-primary me-2 fs-5">0</span>
+          <span class="text-nowrap">Китай</span>
+        </p>
+        <p class="mb-0 text-muted mt-3">
+          <span id="products-count-bishkek" class="text-primary me-2 fs-5">0</span>
+          <span class="text-nowrap">Бишкек</span>
+        </p>
+        <p class="mb-0 text-muted mt-3">
+          <span id="products-count-transit" class="text-primary me-2 fs-5">0</span>
+          <span class="text-nowrap">В пути</span>
+        </p>
+        <p class="mb-0 text-muted mt-3">
+          <span id="products-count-taked" class="text-success me-2 fs-5">0</span>
+          <span class="text-nowrap">Забрали</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-12 col-xl-12 col-xxl-6 mb-5 mb-xl-0">
+    <div class="card card-flush overflow-hidden h-md-100">
+      <div class="card-body">
+        <h5 class="text-muted fw-normal mt-0">Отчет за сегодня (сейчас)</h5>
+        <p class="fsmb-0 mb-3">
+          <span class="fs-1 text-primary" id="total-price-today">0</span>
+          <span class="text-nowrap text-muted">сом за сегодня</span>
+        </p>
+        <h3 id="total-clients" class="mt-3">0</h3>
+        <p class="mb-0 text-muted mb-3"><span class="text-nowrap">клиенты за сегодня</span></p>
+        <h3 id="total-products" class="mt-3">0</h3>
+        <p class="mb-0 text-muted mb-3"><span class="text-nowrap">товары за сегодня продано</span></p>
+        <h3 id="total-weight" class="mt-3">0</h3>
+        <p class="mb-0 text-muted mb-3"><span class="text-nowrap">вес за сегодня</span></p>
+        <a href="/report/" class="btn btn-outline-primary btn-sm mt-3">Полный отчет</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SiteUrl = "{{ site_url_and_port }}";
+const token = "{{ token }}";
+
+  // Функция для получения текущей даты в формате YYYY-MM-DD
+  function getTodayDate() {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+  }
+
+  // Загрузка данных из /stats/summary
+  async function loadSummaryStats() {
+      try {
+          const response = await fetch(`${SiteUrl}/summary`, {
+              method: "GET",
+              headers: {
+                  "Authorization": `Bearer ${token}`,
+                  "Accept": "application/json"
+              }
+          });
+          if (!response.ok) throw new Error(`Ошибка: ${response.status}`);
+          const data = await response.json();
+
+          document.getElementById("clients-count").textContent = data.total_clients;
+          document.getElementById("products-count").textContent = data.total_products;
+          document.getElementById("products-count-china").textContent = data.products_by_status["В китае"] || 0;
+          document.getElementById("products-count-bishkek").textContent = data.products_by_status["Можно забрать"] || 0;
+          document.getElementById("products-count-transit").textContent = data.products_by_status["В пути"] || 0;
+          document.getElementById("products-count-taked").textContent = data.products_by_status["Забрали"] || 0;
+      } catch (error) {
+          console.error("Ошибка загрузки статистики:", error);
+      }
+  }
+
+  // Загрузка данных из /stats/data для сегодняшнего отчета
+  async function loadTodayReport() {
+      const today = getTodayDate();
+      const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
+      try {
+          const response = await fetch(`${SiteUrl}/data?start_date=${today}&end_date=${tomorrow}`, {
+              method: "GET",
+              headers: {
+                  "Authorization": `Bearer ${token}`,
+                  "Accept": "application/json"
+              }
+          });
+          if (!response.ok) throw new Error(`Ошибка: ${response.status}`);
+          const data = await response.json();
+
+          document.getElementById("total-price-today").textContent = data.total_price;
+          document.getElementById("total-clients").textContent = data.total_clients;
+          document.getElementById("total-products").textContent = data.total_products;
+          document.getElementById("total-weight").textContent = data.total_weight.toFixed(2);
+      } catch (error) {
+          console.error("Ошибка загрузки отчета:", error);
+      }
+  }
+
+  // Выполняем загрузку данных при загрузке страницы
+  window.onload = function() {
+      loadSummaryStats();
+      loadTodayReport();
+  };
+</script>

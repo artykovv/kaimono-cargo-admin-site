@@ -1,0 +1,166 @@
+<!-- templates/report/report.html -->
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container mt-5">
+        <h2>Отчет за период</h2>
+
+        <!-- Форма для выбора дат -->
+        <form id="dateFilterForm" class="d-flex mb-3">
+            <input type="date" name="start_date" class="form-control me-2" value="">
+            <input type="date" name="end_date" class="form-control me-2" value="">
+            <button type="submit" class="btn btn-primary">Фильтровать</button>
+        </form>
+
+        <!-- Сводная информация -->
+        <h3>Общие показатели</h3>
+        <p>Всего клиентов: <strong id="total-clients">0</strong></p>
+        <p>Всего товаров: <strong id="total-products">0</strong></p>
+        <p>Общий вес: <strong id="total-weight">0</strong> кг</p>
+        <p>Общая сумма: <strong id="total-price">0</strong> сом</p>
+
+        <!-- Детальная информация по клиентам -->
+        <h3>Детали по клиентам</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Клиент</th>
+                    <th>Код клиента</th>
+                    <th>Количество товаров</th>
+                    <th>Общий вес</th>
+                    <th>Общая сумма</th>
+                    <th>Способ оплаты</th>
+                    <th>Первая выдача</th>
+                    <th>Последняя выдача</th>
+                </tr>
+            </thead>
+            <tbody id="clientDetailsBody"></tbody>
+        </table>
+
+        <!-- Подробности по товарам -->
+        <h3>Подробности по товарам</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Код товара</th>
+                    <th>Клиент</th>
+                    <th>Вес</th>
+                    <th>Цена</th>
+                    <th>Время выдачи</th>
+                    <th>Способ оплаты</th>
+                </tr>
+            </thead>
+            <tbody id="productDetailsBody"></tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+
+        // Функция форматирования даты и времени
+        function formatDateTime(dateStr) {
+            if (!dateStr) return "—";
+            const date = new Date(dateStr);
+            return date.toLocaleString("ru-RU", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            }).replace(",", "");
+        }
+
+        // Функция загрузки данных отчёта
+        async function loadReport(startDate, endDate) {
+            const query = `?start_date=${startDate}&end_date=${endDate}`;
+            try {
+                const response = await fetch(`${SiteUrl}/report/data${query}`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ошибка: ${response.status}`);
+                }
+
+                const data = await response.json();
+                renderReport(data);
+            } catch (error) {
+                console.error("Ошибка при загрузке отчёта:", error);
+                document.getElementById("clientDetailsBody").innerHTML = "<tr><td colspan='8'>Ошибка загрузки данных</td></tr>";
+                document.getElementById("productDetailsBody").innerHTML = "<tr><td colspan='6'>Ошибка загрузки данных</td></tr>";
+            }
+        }
+
+        // Рендеринг данных отчёта
+        function renderReport(data) {
+            // Сводная информация
+            document.getElementById("total-clients").textContent = data.total_clients;
+            document.getElementById("total-products").textContent = data.total_products;
+            document.getElementById("total-weight").textContent = data.total_weight || 0;
+            document.getElementById("total-price").textContent = data.total_price || 0;
+
+            // Детальная информация по клиентам
+            const clientDetailsBody = document.getElementById("clientDetailsBody");
+            clientDetailsBody.innerHTML = "";
+            if (data.client_details && data.client_details.length > 0) {
+                data.client_details.forEach(detail => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${detail.client__name || "—"}</td>
+                        <td>${detail.client__code || "—"}</td>
+                        <td>${detail.total_products}</td>
+                        <td>${detail.total_weight || "0"} кг</td>
+                        <td>${detail.total_price || "0"} сом</td>
+                        <td>${detail.payments__payment_method__name || "Не указан"}</td>
+                        <td>${formatDateTime(detail.earliest_take_time)}</td>
+                        <td>${formatDateTime(detail.latest_take_time)}</td>
+                    `;
+                    clientDetailsBody.appendChild(tr);
+                });
+            } else {
+                clientDetailsBody.innerHTML = "<tr><td colspan='8'>Нет данных за выбранный период.</td></tr>";
+            }
+
+            // Подробности по товарам
+            const productDetailsBody = document.getElementById("productDetailsBody");
+            productDetailsBody.innerHTML = "";
+            if (data.product_details && data.product_details.length > 0) {
+                data.product_details.forEach(product => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${product.product_code}</td>
+                        <td>${product.client__name || "—"} (${product.client__code || "—"})</td>
+                        <td>${product.weight || "0"} кг</td>
+                        <td>${product.price || "0"} сом</td>
+                        <td>${formatDateTime(product.take_time)}</td>
+                        <td>${product.payments__payment_method__name || "Не указан"}</td>
+                    `;
+                    productDetailsBody.appendChild(tr);
+                });
+            } else {
+                productDetailsBody.innerHTML = "<tr><td colspan='6'>Нет выданных товаров.</td></tr>";
+            }
+        }
+
+        // Обработка формы фильтрации
+        document.getElementById("dateFilterForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const startDate = formData.get("start_date") || new Date().toISOString().split("T")[0];
+            const endDate = formData.get("end_date") || new Date().toISOString().split("T")[0];
+            loadReport(startDate, endDate);
+        });
+
+        // Начальная загрузка отчёта за текущий день
+        const today = new Date().toISOString().split("T")[0];
+        document.querySelector("input[name='start_date']").value = today;
+        document.querySelector("input[name='end_date']").value = today;
+        loadReport(today, today);
+    </script>
+{% endblock %}
