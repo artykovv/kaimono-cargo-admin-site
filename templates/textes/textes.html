@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% include 'components/nav_user_config.html' %}
+<h3 class="mb-4">Текста</h3>
+<a href="/textes/create" id="addTextButton" class="btn btn-primary mb-3">Добавить текст</a>
+<!-- Сообщения -->
+<div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody id="textesBody"></tbody>
+</table>
+
+<script>
+        const SiteUrl = "{{ site_url_and_port }}";
+        const token = "{{ token }}";
+
+        // Функция загрузки параметров
+        async function loadSettings() {
+            try {
+                const response = await fetch(`${SiteUrl}/textes/`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ошибка: ${response.status}`);
+                }
+
+                const settings = await response.json();
+                renderSettings(settings);
+            } catch (error) {
+                console.error("Ошибка при загрузке параметров:", error);
+                document.getElementById("textesBody").innerHTML = "<tr><td colspan='3'>Ошибка загрузки данных</td></tr>";
+                document.getElementById("errorMessage").textContent = "Не удалось загрузить данные: " + error.message;
+                document.getElementById("errorMessage").style.display = "block";
+            }
+        }
+
+        // Рендеринг списка параметров
+        function renderSettings(settings) {
+            const tbody = document.getElementById("textesBody");
+            tbody.innerHTML = "";
+
+            if (settings && settings.length > 0) {
+                settings.forEach(config => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${config.id || ""}</td>
+                        <td>${config.key || ""}</td>
+                        <td>${config.name || ""}</td>
+                        <td>
+                            <a href="/textes/edit/${config.id}" class="btn btn-sm btn-warning">U</a>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = "<tr><td colspan='3'>Нет параметров.</td></tr>";
+            }
+        }
+
+        // Начальная загрузка
+        loadSettings();
+    </script>
+{% endblock %}

@@ -11,6 +11,7 @@ from .branch.router import router as branch
 from .china.router import router as china
 from .payment.router import router as payment
 from .telegram.router import router as telegram
+from .textes.rotuer import router as textes
 
 routers  = APIRouter()
 
@@ -25,3 +26,4 @@ routers.include_router(branch)
 routers.include_router(china)
 routers.include_router(payment)
 routers.include_router(telegram)
+routers.include_router(textes)
