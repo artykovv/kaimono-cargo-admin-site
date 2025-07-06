@@ -12,6 +12,7 @@ from .china.router import router as china
 from .payment.router import router as payment
 from .telegram.router import router as telegram
 from .textes.rotuer import router as textes
+from .files.router import router as files
 
 routers  = APIRouter()
 
@@ -27,3 +28,4 @@ routers.include_router(china)
 routers.include_router(payment)
 routers.include_router(telegram)
 routers.include_router(textes)
+routers.include_router(files)
