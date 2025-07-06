@@ -92,6 +92,27 @@ async def create_product_page(request: Request):
         }
     )
 
+@router.get("/transit", response_class=HTMLResponse)
+async def create_product_page(request: Request):
+    session_key = request.cookies.get("Bearer")
+    if session_key is None:
+        return RedirectResponse(url="/login")
+
+    status = await validate_token(session_key)
+    if status != 200:
+        return RedirectResponse(url="/login")
+    
+    return templates.TemplateResponse(
+        "products/transit.html",
+        {
+            "request": request,
+            "current_page": "products",
+            "title": "Добавить товары В пути",
+            "token": session_key,
+            "site_url_and_port": site_url_and_port,
+        }
+    )
+
 @router.get("/delete/{product_id}/", response_class=HTMLResponse)
 async def delete_product_page(request: Request, product_id: int):
     session_key = request.cookies.get("Bearer")
