@@ -5,58 +5,28 @@
     <div class="container mt-5">
         <h4 class="mb-3">Выдача товаров клиенту</h4>
 
-        <!-- Сообщения -->
-        <div id="successMessage" class="alert alert-success" style="display: none;"></div>
-        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
-
-        <!-- Форма для ввода кода клиента -->
+        <!-- Поиск -->
         <form id="searchForm" class="d-flex mb-3">
             <input type="text" name="client_code" class="form-control" placeholder="Введите код клиента" value="">
             <button type="submit" class="btn btn-primary ms-2">Поиск</button>
-            <a href="#" class="btn btn-secondary ms-2" id="resetBtn">Сброс</a>
         </form>
 
-        <!-- Информация о клиенте и товарах -->
-        <div id="clientInfo" style="display: none;">
+        <!-- Сообщения -->
+        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
 
-            <p>Имя клиента: <strong id="clientNameStrong"></strong></p>
-            <p>Общий вес: <strong><span id="total-weight">0.00</span> кг</strong></p>
-            <p>Общая сумма: <strong><span id="total-price">0</span> сом</strong></p>
-            <p>Количество товаров: <strong><span id="total-count">0</span></strong></p>
-
-            <!-- Форма для обновления статуса товаров и выбора способа оплаты -->
-            <form id="product-form" class="mt-4">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th><input type="checkbox" id="select-all" /></th>
-                            <th>Код товара</th>
-                            <th>Вес</th>
-                            <th>Цена</th>
-                            <th>Статус</th>
-
-                            <th>Дата</th>
-                        </tr>
-                    </thead>
-                    <tbody id="productsTableBody"></tbody>
-                </table>
-
-                <!-- Выбор способа оплаты -->
-                <div class="mb-3">
-                    <label for="payment_method" class="form-label">Способ оплаты:</label>
-                    <select name="payment_method" id="payment_method" class="form-select" required>
-                        <option value="" disabled selected>Выберите способ оплаты</option>
-                        <!-- Способы оплаты будут загружены через JS -->
-                    </select>
-                </div>
-
-                <input type="hidden" name="client_code" id="clientCodeHidden" value="">
-                <button type="submit" class="btn btn-success">Выдать</button>
-            </form>
-        </div>
-
-        <div id="noClient" style="display: none;">
-            <p>Клиент с таким кодом не найден.</p>
+        <!-- Отчет по клиентам к выдаче -->
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Код клиента</th>
+                        <th>Товаров</th>
+                        <th>Сумма</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="reportTableBody"></tbody>
+            </table>
         </div>
     </div>
 
@@ -64,219 +34,71 @@
     <script>
         const SiteUrl = "{{ site_url_and_port }}";
         const token = "{{ token }}";
-        let clientData = null;
 
-        // Функция загрузки данных клиента
-        async function loadClient(clientCode) {
+        let reportData = [];
+
+        async function fetchReport() {
             try {
-                const response = await fetch(`${SiteUrl}/take/${clientCode}`, {
-                    method: "GET",
+                const response = await fetch(`${SiteUrl}/take/report`, {
+                    method: "POST",
                     headers: {
                         "Authorization": `Bearer ${token}`,
                         "Accept": "application/json"
                     }
                 });
-
                 if (!response.ok) {
                     throw new Error(`Ошибка: ${response.status}`);
                 }
-
-                const data = await response.json();
-                clientData = data;
-                renderClient(data);
+                reportData = await response.json();
+                const params = new URLSearchParams(window.location.search);
+                const q = params.get("client_code") || "";
+                if (q) {
+                    document.querySelector("input[name='client_code']").value = q;
+                }
+                renderReport(applyFilter(q));
             } catch (error) {
-                console.error("Ошибка при загрузке клиента:", error);
-                document.getElementById("clientInfo").style.display = "none";
-                document.getElementById("noClient").style.display = "block";
+                console.error("Ошибка при загрузке отчета:", error);
+                const errorDiv = document.getElementById("errorMessage");
+                errorDiv.textContent = "Не удалось загрузить отчет: " + error.message;
+                errorDiv.style.display = "block";
             }
         }
 
-        // Рендеринг данных клиента и товаров
-        function renderClient(client) {
-            if (!client || !client.id) {
-                document.getElementById("clientInfo").style.display = "none";
-                document.getElementById("noClient").style.display = "block";
+        function renderReport(items) {
+            const tbody = document.getElementById("reportTableBody");
+            tbody.innerHTML = "";
+            if (!items || items.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='4'>Нет данных</td></tr>";
                 return;
             }
-
-
-            document.getElementById("clientNameStrong").textContent = client.name || "Не указано";
-            document.getElementById("clientInfo").style.display = "block";
-            document.getElementById("noClient").style.display = "none";
-            document.getElementById("clientCodeHidden").value = client.code || "";
-
-            const tbody = document.getElementById("productsTableBody");
-            tbody.innerHTML = "";
-            if (client.products && client.products.length > 0) {
-                client.products.forEach(product => {
-                    const tr = document.createElement("tr");
-                    tr.innerHTML = `
-                        <td><input type="checkbox" name="selected_products" value="${product.id}" class="product-checkbox" data-price="${product.price || 0}" data-weight="${product.weight || 0}"></td>
-                        <td>${product.product_code || ""}</td>
-                        <td>${product.weight ? product.weight : "—"}</td>
-                        <td>${product.price ? product.price : "—"}</td>
-                        <td>${product.status ? product.status.name : "—"}</td>
-
-                        <td>${product.date ? new Date(product.date).toLocaleDateString("ru-RU", {year: "numeric", month: "2-digit", day: "2-digit"}) : "—"}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            } else {
-                tbody.innerHTML = "<tr><td colspan='7'>Нет товаров с таким статусом для этого клиента.</td></tr>";
-            }
-
-            updateTotals();
-            attachEventListeners();
-        }
-
-        // Функция загрузки способов оплаты
-        async function loadPaymentMethods() {
-            try {
-                const response = await fetch(`${SiteUrl}/payment-methods/`, {
-                    method: "GET",
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "Accept": "application/json"
-                    }
-                });
-                const methods = await response.json();
-                const select = document.getElementById("payment_method");
-                methods.forEach(method => {
-                    const option = document.createElement("option");
-                    option.value = method.id;
-                    option.textContent = method.name;
-                    select.appendChild(option);
-                });
-            } catch (error) {
-                console.error("Ошибка при загрузке способов оплаты:", error);
-            }
-        }
-
-        // Функция расчёта итогов
-        function updateTotals() {
-            const checkboxes = document.querySelectorAll('.product-checkbox:checked');
-            let totalPrice = 0;
-            let totalWeight = 0;
-            let totalCount = checkboxes.length;
-
-            checkboxes.forEach(checkbox => {
-                const price = parseFloat(checkbox.getAttribute('data-price')) || 0;
-                const weight = parseFloat(checkbox.getAttribute('data-weight')) || 0;
-                totalPrice += price;
-                totalWeight += weight;
-            });
-
-            document.getElementById('total-price').textContent = totalPrice;
-            document.getElementById('total-weight').textContent = totalWeight.toFixed(2);
-            document.getElementById('total-count').textContent = totalCount;
-        }
-
-        // Привязка слушателей событий
-        function attachEventListeners() {
-            document.getElementById("select-all").addEventListener("change", function() {
-                const checkboxes = document.querySelectorAll(".product-checkbox");
-                checkboxes.forEach(checkbox => {
-                    checkbox.checked = this.checked;
-                });
-                updateTotals();
-            });
-
-            document.getElementById("productsTableBody").addEventListener("change", (e) => {
-                if (e.target.classList.contains("product-checkbox")) {
-                    updateTotals();
-                }
-            });
-
-            document.getElementById("productsTableBody").addEventListener("click", (e) => {
-                const tr = e.target.closest("tr");
-                if (tr) {
-                    const checkbox = tr.querySelector(".product-checkbox");
-                    if (checkbox && e.target !== checkbox) {
-                        checkbox.checked = !checkbox.checked;
-                        updateTotals();
-                    }
-                }
+            items.forEach(item => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${item.code}</td>
+                    <td>${item.product_count}</td>
+                    <td>${item.total_product_price}</td>
+                    <td class="text-end"><a class="btn btn-success btn-sm" href="/take/${item.code}">Выдать</a></td>
+                `;
+                tbody.appendChild(tr);
             });
         }
 
-        // Обработка формы поиска
+        function applyFilter(query) {
+            const q = (query || "").trim().toLowerCase();
+            if (!q) return reportData;
+            return reportData.filter(r => (r.code || "").toLowerCase().includes(q));
+        }
+
         document.getElementById("searchForm").addEventListener("submit", (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
-            const clientCode = formData.get("client_code");
-            if (clientCode) {
-                loadClient(clientCode);
-            }
-        });
-
-        // Сброс формы
-        document.getElementById("resetBtn").addEventListener("click", (e) => {
-            e.preventDefault();
-            document.querySelector("input[name='client_code']").value = "";
-            document.getElementById("clientInfo").style.display = "none";
-            document.getElementById("noClient").style.display = "none";
-            clientData = null;
-        });
-
-        // Обработка выдачи товаров
-        document.getElementById("product-form").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const selectedProducts = formData.getAll("selected_products").map(id => parseInt(id));
-            const paymentMethod = formData.get("payment_method");
-            const clientCode = formData.get("client_code");
-
-            if (selectedProducts.length === 0) {
-                const errorDiv = document.getElementById("errorMessage");
-                errorDiv.textContent = "Выберите хотя бы один товар для выдачи";
-                errorDiv.style.display = "block";
+            const q = (formData.get("client_code") || "").trim();
+            if (q) {
+                window.location.href = `/take/${q}`;
                 return;
             }
-            if (!paymentMethod) {
-                const errorDiv = document.getElementById("errorMessage");
-                errorDiv.textContent = "Выберите способ оплаты";
-                errorDiv.style.display = "block";
-                return;
-            }
-
-            try {
-                const response = await fetch(`${SiteUrl}/take/issue`, {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(`Ошибка: ${response.status} - ${JSON.stringify(errorData)}`);
-                }
-
-                const result = await response.json();
-                const successDiv = document.getElementById("successMessage");
-                successDiv.textContent = result.message;
-                successDiv.style.display = "block";
-                document.getElementById("errorMessage").style.display = "none";
-
-                // Обновляем данные клиента после выдачи
-                loadClient(clientCode);
-            } catch (error) {
-                console.error("Ошибка при выдаче товаров:", error);
-                const errorDiv = document.getElementById("errorMessage");
-                errorDiv.textContent = "Не удалось выдать товары: " + error.message;
-                errorDiv.style.display = "block";
-                document.getElementById("successMessage").style.display = "none";
-            }
         });
 
-        // Начальная загрузка способов оплаты и данных клиента (если есть в URL)
-        loadPaymentMethods();
-        const urlParams = new URLSearchParams(window.location.search);
-        const clientCode = urlParams.get("client_code");
-        if (clientCode) {
-            document.querySelector("input[name='client_code']").value = clientCode;
-            loadClient(clientCode);
-        }
+        fetchReport();
     </script>
 {% endblock %}
